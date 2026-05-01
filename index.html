@@ -772,8 +772,15 @@ function renderVideos() {
   `;
   document.getElementById('video-count-label').textContent = `${videos.length} 本の動画`;
  
+  const sorted = [...videos].sort((a, b) => {
+    if (!a.postDate && !b.postDate) return 0;
+    if (!a.postDate) return 1;
+    if (!b.postDate) return -1;
+    return b.postDate.localeCompare(a.postDate);
+  });
+ 
   const signed = isSignedIn();
-  document.getElementById('video-tbody').innerHTML = videos.map(v => {
+  document.getElementById('video-tbody').innerHTML = sorted.map(v => {
     const shootRegistered = v.gcal_shoot_id ? '✓' : '';
     const postRegistered  = v.gcal_post_id  ? '✓' : '';
     return `<tr>
