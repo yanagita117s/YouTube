@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube管理表</title>
+
+<!-- Google API -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<style>
+  /* ===== リセット・基本 ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f4f0; --bg3: #eeedea;
+    --text: #1a1a18; --text2: #5a5a56; --text3: #9a9994;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --purple: #7F77DD; --purple-bg: #EEEDFE; --purple-text: #534AB7;
+    --amber-bg: #FAEEDA; --amber-text: #854F0B;
+    --green-bg: #EAF3DE; --green-text: #3B6D11;
+    --blue-bg: #E6F1FB; --blue-text: #185FA5;
+    --red-bg: #FCEBEB; --red-text: #A32D2D;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --bg2: #252523; --bg3: #2e2e2b;
+      --text: #e8e6de; --text2: #a0a09a; --text3: #666660;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+      --purple-bg: #2e2b52; --purple-text: #AFA9EC;
+      --amber-bg: #3a2e10; --amber-text: #FAC775;
+      --green-bg: #1a2e0a; --green-text: #C0DD97;
+      --blue-bg: #0c2240; --blue-text: #85B7EB;
+      --red-bg: #3a1010; --red-text: #F09595;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
+
+  /* ===== レイアウト ===== */
+  .app { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  header h1 { font-size: 20px; font-weight: 600; color: var(--text); }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 8px 18px; font-size: 14px; cursor: pointer; border: none; background: none; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: var(--radius) var(--radius) 0 0; }
+  .tab:hover { background: var(--bg2); }
+  .tab.active { color: var(--text); border-bottom-color: var(--purple); font-weight: 500; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* ===== Googleサインイン ===== */
+  #auth-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #signin-btn { background: var(--purple); color: #fff; border: none; border-radius: var(--radius); padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500; }
+  #signin-btn:hover { opacity: 0.88; }
+  #signout-btn { background: none; border: 1px solid var(--border2); border-radius: var(--radius); padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--text2); display: none; }
+  #user-info { font-size: 13px; color: var(--text2); display: none; }
+  .auth-status { font-size: 12px; padding: 4px 10px; border-radius: 99px; }
+  .auth-on  { background: var(--green-bg); color: var(--green-text); }
+  .auth-off { background: var(--bg2); color: var(--text3); }
+
+  /* ===== カード・テーブル ===== */
+  .card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat { background: var(--bg2); border-radius: var(--radius); padding: 12px 14px; }
+  .stat-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .stat-val { font-size: 22px; font-weight: 600; }
+  .stat-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 680px; }
+  th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 500; color: var(--text3); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg2); }
+
+  /* ===== バッジ ===== */
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .s-plan  { background: var(--blue-bg);   color: var(--blue-text); }
+  .s-shoot { background: var(--amber-bg);  color: var(--amber-text); }
+  .s-edit  { background: var(--purple-bg); color: var(--purple-text); }
+  .s-done  { background: var(--green-bg);  color: var(--green-text); }
+  .s-live  { background: var(--green-bg);  color: var(--green-text); }
+
+  /* ===== ボタン ===== */
+  .btn { border: 1px solid var(--border2); background: none; border-radius: var(--radius); padding: 6px 12px; font-size: 12px; cursor: pointer; color: var(--text); }
+  .btn:hover { background: var(--bg2); }
+  .btn-primary { background: var(--purple); color: #fff; border-color: var(--purple); }
+  .btn-primary:hover { opacity: 0.88; }
+  .gcal-btns { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+  .btn-shoot { background: var(--amber-bg); color: var(--amber-text); border-color: transparent; font-size: 11px; padding: 4px 9px; }
+  .btn-shoot:hover { opacity: 0.8; background: var(--amber-bg); }
+  .btn-post  { background: var(--purple-bg); color: var(--purple-text); border-color: transparent; font-size: 11px; padding: 4px 9px; }
+  .btn-post:hover { opacity: 0.8; background: var(--purple-bg); }
+  .btn-both  { background: var(--green-bg); color: var(--green-text); border-color: transparent; font-size: 11px; padding: 4px 9px; }
+  .btn-both:hover { opacity: 0.8; background: var(--green-bg); }
+  .btn-del { color: var(--red-text); border-color: transparent; font-size: 11px; padding: 4px 8px; }
+
+  /* ===== カレンダー ===== */
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .cal-nav { display: flex; align-items: center; gap: 10px; }
+  .cal-nav button { background: none; border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 12px; cursor: pointer; font-size: 16px; color: var(--text); }
+  .cal-legend { display: flex; gap: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal-day-label { text-align: center; font-size: 11px; color: var(--text3); padding: 4px 0; font-weight: 500; }
+  .cal-cell { min-height: 80px; border: 1px solid var(--border); border-radius: 6px; padding: 5px; background: var(--bg); }
+  .cal-cell.other-month { background: var(--bg2); opacity: 0.6; }
+  .cal-cell.today { border-color: var(--purple); }
+  .cal-date { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+  .cal-cell.today .cal-date { color: var(--purple); font-weight: 600; }
+  .cal-event { border-radius: 3px; padding: 2px 5px; margin-top: 2px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .ev-shoot { background: var(--amber-bg); color: var(--amber-text); }
+  .ev-post  { background: var(--purple-bg); color: var(--purple-text); }
+
+  /* ===== タスク ===== */
+  .task-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
+  .task-item.done { opacity: 0.5; }
+  .task-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--purple); flex-shrink: 0; }
+  .task-text { flex: 1; font-size: 13px; }
+  .task-item.done .task-text { text-decoration: line-through; color: var(--text3); }
+  .task-tag { font-size: 11px; color: var(--text3); white-space: nowrap; }
+
+  /* ===== モーダル ===== */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg); border-radius: var(--radius-lg); border: 1px solid var(--border); padding: 24px; width: 420px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .form-row { margin-bottom: 12px; }
+  .form-row label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .form-row input, .form-row select, .form-row textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius); font-size: 13px; background: var(--bg); color: var(--text); outline: none; }
+  .form-row input:focus, .form-row select:focus { border-color: var(--purple); }
+  .form-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* ===== セクションヘッダ ===== */
+  .sec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+
+  /* ===== トースト ===== */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 99px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; }
+  #toast.show { opacity: 1; }
+
+  /* ===== 設定画面 ===== */
+  .settings-note { background: var(--blue-bg); color: var(--blue-text); border-radius: var(--radius); padding: 12px 16px; font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+  .settings-note code { background: rgba(0,0,0,0.1); padding: 1px 5px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+  .client-id-input { width: 100%; padding: 10px; border: 1px solid var(--border2); border-radius: var(--radius); font-size: 13px; font-family: monospace; background: var(--bg); color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>📹 YouTube管理表</h1>
+    <div id="auth-bar">
+      <span id="auth-status" class="auth-status auth-off">未接続</span>
+      <span id="user-info"></span>
+      <button id="signin-btn" onclick="handleSignIn()">Googleでサインイン</button>
+      <button id="signout-btn" onclick="handleSignOut()">サインアウト</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('videos')">動画一覧</button>
+    <button class="tab" onclick="showTab('calendar')">カレンダー</button>
+    <button class="tab" onclick="showTab('tasks')">タスク</button>
+    <button class="tab" onclick="showTab('settings')">設定</button>
+  </div>
+
+  <!-- 動画一覧 -->
+  <div id="sec-videos" class="section active">
+    <div class="stats" id="stats-area"></div>
+    <div class="sec-header">
+      <span style="font-size:13px;color:var(--text2)" id="video-count-label"></span>
+      <button class="btn btn-primary" onclick="openVideoModal()">+ 動画を追加</button>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>タイトル</th>
+            <th>ステータス</th>
+            <th>撮影予定日</th>
+            <th>投稿予定日</th>
+            <th>視聴回数</th>
+            <th>Googleカレンダー</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="video-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- カレンダー -->
+  <div id="sec-calendar" class="section">
+    <div class="cal-header">
+      <div class="cal-nav">
+        <button onclick="changeMonth(-1)">&#8249;</button>
+        <span style="font-size:16px;font-weight:600" id="cal-title"></span>
+        <button onclick="changeMonth(1)">&#8250;</button>
+      </div>
+      <div class="cal-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#EF9F27"></div>撮影日</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#7F77DD"></div>投稿日</div>
+      </div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+
+  <!-- タスク -->
+  <div id="sec-tasks" class="section">
+    <div class="sec-header">
+      <span style="font-size:13px;color:var(--text2)">制作タスク</span>
+      <button class="btn btn-primary" onclick="openTaskModal()">+ タスク追加</button>
+    </div>
+    <div id="task-list"></div>
+  </div>
+
+  <!-- 設定 -->
+  <div id="sec-settings" class="section">
+    <div class="card">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:16px">Google Calendar API 設定</h3>
+      <div class="settings-note">
+        <strong>クライアントIDの取得手順：</strong><br>
+        1. <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> を開く<br>
+        2. プロジェクトを作成 → 「APIとサービス」→「ライブラリ」→ Google Calendar API を有効化<br>
+        3. 「認証情報」→「+ 認証情報を作成」→「OAuth クライアントID」→「ウェブアプリケーション」<br>
+        4. 承認済みのJavaScript生成元に <code>null</code>（ローカルファイル用）を追加、またはサーバーのURLを追加<br>
+        5. 作成されたクライアントIDを下に貼り付けて保存
+      </div>
+      <div class="form-row">
+        <label>クライアントID</label>
+        <input type="text" class="client-id-input" id="client-id-input" placeholder="xxxxxxxx.apps.googleusercontent.com">
+        <div class="form-hint">保存するとlocalStorageに記録されます（このデバイスのみ）</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="saveClientId()">保存して再初期化</button>
+        <button class="btn" onclick="clearClientId()">クリア</button>
+      </div>
+      <div id="settings-msg" style="margin-top:10px;font-size:13px;color:var(--green-text)"></div>
+    </div>
+
+    <div class="card" style="margin-top:0">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">データ管理</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="exportData()">📥 JSONエクスポート</button>
+        <button class="btn" onclick="document.getElementById('import-file').click()">📤 JSONインポート</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 動画モーダル -->
+<div class="modal-bg" id="video-modal">
+  <div class="modal">
+    <h3 id="video-modal-title">動画を追加</h3>
+    <div class="form-row"><label>タイトル</label><input type="text" id="m-title" placeholder="動画タイトル"></div>
+    <div class="form-row"><label>ステータス</label>
+      <select id="m-status">
+        <option value="plan">企画中</option>
+        <option value="shoot">撮影中</option>
+        <option value="edit">編集中</option>
+        <option value="done">完成</option>
+        <option value="live">公開済み</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>撮影予定日</label>
+      <input type="date" id="m-shoot">
+      <div class="form-hint">📷 撮影 として Googleカレンダーに登録できます</div>
+    </div>
+    <div class="form-row">
+      <label>投稿予定日</label>
+      <input type="date" id="m-post">
+      <div class="form-hint">📹 投稿 として Googleカレンダーに登録できます</div>
+    </div>
+    <div class="form-row"><label>視聴回数</label><input type="number" id="m-views" placeholder="0" min="0"></div>
+    <div class="form-row"><label>総再生時間（分）</label><input type="number" id="m-watch" placeholder="0" min="0"></div>
+    <div class="form-row"><label>メモ</label><textarea id="m-memo" rows="2" placeholder="備考など"></textarea></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeVideoModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveVideo()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- タスクモーダル -->
+<div class="modal-bg" id="task-modal">
+  <div class="modal">
+    <h3>タスクを追加</h3>
+    <div class="form-row"><label>タスク内容</label><input type="text" id="tm-text" placeholder="例: サムネイル作成"></div>
+    <div class="form-row"><label>関連動画</label><input type="text" id="tm-video" placeholder="動画タイトル（任意）"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeTaskModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveTask()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== 定数 =====
+const STATUS_LABEL = { plan:'企画中', shoot:'撮影中', edit:'編集中', done:'完成', live:'公開済み' };
+const STATUS_BADGE = { plan:'s-plan', shoot:'s-shoot', edit:'s-edit', done:'s-done', live:'s-live' };
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+
+// ===== データ =====
+let videos = JSON.parse(localStorage.getItem('yt_videos') || 'null') || [
+  { id:1, title:'【初心者向け】Vlog撮影のコツ10選', status:'live', shootDate:'2026-04-05', postDate:'2026-04-10', views:12400, watch:3800, memo:'', gcal_shoot_id:'', gcal_post_id:'' },
+  { id:2, title:'カメラ機材レビュー 2026年版',       status:'edit', shootDate:'2026-04-28', postDate:'2026-05-08', views:0, watch:0, memo:'', gcal_shoot_id:'', gcal_post_id:'' },
+  { id:3, title:'旅行Vlog：京都春の旅',             status:'shoot', shootDate:'2026-05-10', postDate:'2026-05-20', views:0, watch:0, memo:'', gcal_shoot_id:'', gcal_post_id:'' },
+  { id:4, title:'YouTube収益化の仕組みを解説',       status:'plan',  shootDate:'2026-05-18', postDate:'2026-05-28', views:0, watch:0, memo:'', gcal_shoot_id:'', gcal_post_id:'' },
+  { id:5, title:'サブスク比較 2026年おすすめ5選',   status:'done',  shootDate:'2026-05-25', postDate:'2026-06-05', views:0, watch:0, memo:'', gcal_shoot_id:'', gcal_post_id:'' },
+];
+let tasks = JSON.parse(localStorage.getItem('yt_tasks') || 'null') || [
+  { id:1, text:'カメラ機材レビューのサムネイル作成', video:'カメラ機材レビュー', done:false },
+  { id:2, text:'京都Vlogの撮影ロケハン', video:'旅行Vlog：京都春の旅', done:false },
+  { id:3, text:'収益化解説動画の台本作成', video:'YouTube収益化の仕組みを解説', done:false },
+  { id:4, text:'概要欄テンプレートを更新', video:'', done:true },
+];
+let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
+let editingVideoId = null;
+let tokenClient = null;
+let gapiInited = false, gisInited = false;
+
+function saveVideos() { localStorage.setItem('yt_videos', JSON.stringify(videos)); }
+function saveTasks()  { localStorage.setItem('yt_tasks',  JSON.stringify(tasks)); }
+
+// ===== Google API 初期化 =====
+function getClientId() {
+  return localStorage.getItem('yt_gcal_client_id') || '';
+}
+
+function gapiLoaded() {
+  gapi.load('client', async () => {
+    await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+    gapiInited = true;
+    maybeInitToken();
+  });
+}
+
+function gisLoaded() {
+  const clientId = getClientId();
+  if (!clientId) { gisInited = true; return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: SCOPES,
+    callback: (resp) => {
+      if (resp.error) { toast('認証エラー: ' + resp.error); return; }
+      updateAuthUI(true);
+      toast('Googleカレンダーに接続しました ✓');
+      renderVideos();
+    }
+  });
+  gisInited = true;
+  maybeInitToken();
+}
+
+function maybeInitToken() {
+  if (!gapiInited || !gisInited) return;
+  // 既存トークンがあれば自動でUIを更新
+  const tok = gapi.client.getToken();
+  if (tok) updateAuthUI(true);
+}
+
+function handleSignIn() {
+  if (!getClientId()) { showTab('settings'); toast('先にクライアントIDを設定してください'); return; }
+  if (!tokenClient) { toast('APIが初期化中です。少し待ってから再試行してください'); return; }
+  if (gapi.client.getToken() === null) {
+    tokenClient.requestAccessToken({ prompt: 'consent' });
+  } else {
+    tokenClient.requestAccessToken({ prompt: '' });
+  }
+}
+
+function handleSignOut() {
+  const tok = gapi.client.getToken();
+  if (tok) {
+    google.accounts.oauth2.revoke(tok.access_token, () => {});
+    gapi.client.setToken('');
+  }
+  updateAuthUI(false);
+  renderVideos();
+}
+
+function updateAuthUI(isSignedIn) {
+  const statusEl = document.getElementById('auth-status');
+  const signinBtn = document.getElementById('signin-btn');
+  const signoutBtn = document.getElementById('signout-btn');
+  if (isSignedIn) {
+    statusEl.textContent = 'カレンダー接続中';
+    statusEl.className = 'auth-status auth-on';
+    signinBtn.style.display = 'none';
+    signoutBtn.style.display = 'inline-block';
+  } else {
+    statusEl.textContent = '未接続';
+    statusEl.className = 'auth-status auth-off';
+    signinBtn.style.display = 'inline-block';
+    signoutBtn.style.display = 'none';
+  }
+}
+
+function isSignedIn() {
+  return gapi.client && gapi.client.getToken() !== null;
+}
+
+// ===== カレンダーAPI =====
+async function createCalendarEvent(title, date, emoji, label) {
+  if (!isSignedIn()) { handleSignIn(); return null; }
+  if (!date) { toast('日付が設定されていません'); return null; }
+  try {
+    const resp = await gapi.client.calendar.events.insert({
+      calendarId: 'primary',
+      resource: {
+        summary: emoji + ' ' + label + '：' + title,
+        start: { date: date },
+        end:   { date: nextDay(date) },
+        description: 'YouTube管理表より自動登録'
+      }
+    });
+    return resp.result.id;
+  } catch(e) {
+    toast('カレンダー登録に失敗しました: ' + (e.result?.error?.message || e));
+    return null;
+  }
+}
+
+async function updateCalendarEvent(eventId, title, date, emoji, label) {
+  if (!isSignedIn() || !eventId) return;
+  try {
+    await gapi.client.calendar.events.patch({
+      calendarId: 'primary',
+      eventId: eventId,
+      resource: {
+        summary: emoji + ' ' + label + '：' + title,
+        start: { date: date },
+        end:   { date: nextDay(date) }
+      }
+    });
+  } catch(e) { console.warn('update failed', e); }
+}
+
+async function deleteCalendarEvent(eventId) {
+  if (!isSignedIn() || !eventId) return;
+  try {
+    await gapi.client.calendar.events.delete({ calendarId: 'primary', eventId: eventId });
+  } catch(e) { console.warn('delete failed', e); }
+}
+
+function nextDay(dateStr) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// ===== カレンダーへ飛ばす（API未使用でも動くURLリンク） =====
+function gcalAddUrl(title, date, label, emoji) {
+  if (!date) return null;
+  const d = date.replace(/-/g,'');
+  const nd = nextDay(date).replace(/-/g,'');
+  const t = encodeURIComponent(emoji + ' ' + label + '：' + title);
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${t}&dates=${d}/${nd}&details=${encodeURIComponent('YouTube管理表より')}`;
+}
+
+// ===== 動画の追加・カレンダー登録 =====
+async function addToCalendar(videoId, type) {
+  const v = videos.find(v => v.id === videoId);
+  if (!v) return;
+
+  if (isSignedIn()) {
+    // APIで直接登録
+    if (type === 'shoot' || type === 'both') {
+      if (v.shootDate) {
+        if (v.gcal_shoot_id) {
+          await updateCalendarEvent(v.gcal_shoot_id, v.title, v.shootDate, '📷', '撮影');
+          toast('撮影日を更新しました ✓');
+        } else {
+          const id = await createCalendarEvent(v.title, v.shootDate, '📷', '撮影');
+          if (id) { v.gcal_shoot_id = id; toast('撮影日をカレンダーに追加しました ✓'); }
+        }
+      }
+    }
+    if (type === 'post' || type === 'both') {
+      if (v.postDate) {
+        if (v.gcal_post_id) {
+          await updateCalendarEvent(v.gcal_post_id, v.title, v.postDate, '📹', '投稿');
+          toast('投稿日を更新しました ✓');
+        } else {
+          const id = await createCalendarEvent(v.title, v.postDate, '📹', '投稿');
+          if (id) { v.gcal_post_id = id; toast('投稿日をカレンダーに追加しました ✓'); }
+        }
+      }
+    }
+    saveVideos(); renderVideos();
+  } else {
+    // APIなし → URLで飛ばす
+    if (type === 'shoot' && v.shootDate) {
+      window.open(gcalAddUrl(v.title, v.shootDate, '撮影', '📷'));
+    } else if (type === 'post' && v.postDate) {
+      window.open(gcalAddUrl(v.title, v.postDate, '投稿', '📹'));
+    } else if (type === 'both') {
+      if (v.shootDate) window.open(gcalAddUrl(v.title, v.shootDate, '撮影', '📷'));
+      setTimeout(() => { if (v.postDate) window.open(gcalAddUrl(v.title, v.postDate, '投稿', '📹')); }, 500);
+    }
+  }
+}
+
+// ===== 動画 CRUD =====
+function openVideoModal(id) {
+  editingVideoId = id || null;
+  const v = id ? videos.find(v => v.id === id) : null;
+  document.getElementById('video-modal-title').textContent = id ? '動画を編集' : '動画を追加';
+  document.getElementById('m-title').value  = v ? v.title : '';
+  document.getElementById('m-status').value = v ? v.status : 'plan';
+  document.getElementById('m-shoot').value  = v ? (v.shootDate || '') : '';
+  document.getElementById('m-post').value   = v ? (v.postDate  || '') : '';
+  document.getElementById('m-views').value  = v ? v.views : '';
+  document.getElementById('m-watch').value  = v ? v.watch : '';
+  document.getElementById('m-memo').value   = v ? (v.memo || '') : '';
+  document.getElementById('video-modal').classList.add('open');
+}
+function closeVideoModal() { document.getElementById('video-modal').classList.remove('open'); }
+
+function saveVideo() {
+  const title = document.getElementById('m-title').value.trim();
+  if (!title) { toast('タイトルを入力してください'); return; }
+  const data = {
+    title, status: document.getElementById('m-status').value,
+    shootDate: document.getElementById('m-shoot').value,
+    postDate:  document.getElementById('m-post').value,
+    views: parseInt(document.getElementById('m-views').value) || 0,
+    watch: parseInt(document.getElementById('m-watch').value) || 0,
+    memo:  document.getElementById('m-memo').value.trim(),
+  };
+  if (editingVideoId) {
+    const v = videos.find(v => v.id === editingVideoId);
+    Object.assign(v, data);
+  } else {
+    videos.push({ id: Date.now(), gcal_shoot_id:'', gcal_post_id:'', ...data });
+  }
+  saveVideos(); closeVideoModal(); renderVideos();
+  toast(editingVideoId ? '動画を更新しました' : '動画を追加しました');
+}
+
+async function deleteVideo(id) {
+  if (!confirm('この動画を削除しますか？')) return;
+  const v = videos.find(v => v.id === id);
+  if (v) {
+    await deleteCalendarEvent(v.gcal_shoot_id);
+    await deleteCalendarEvent(v.gcal_post_id);
+  }
+  videos = videos.filter(v => v.id !== id);
+  saveVideos(); renderVideos(); toast('削除しました');
+}
+
+// ===== 表示 =====
+function renderVideos() {
+  const live  = videos.filter(v => v.status === 'live').length;
+  const wip   = videos.filter(v => ['plan','shoot','edit'].includes(v.status)).length;
+  const totalV = videos.reduce((s,v) => s + v.views, 0);
+  const totalW = videos.reduce((s,v) => s + v.watch, 0);
+  document.getElementById('stats-area').innerHTML = `
+    <div class="stat"><div class="stat-label">総動画数</div><div class="stat-val">${videos.length}</div><div class="stat-sub">公開済み ${live}本</div></div>
+    <div class="stat"><div class="stat-label">総視聴回数</div><div class="stat-val">${totalV.toLocaleString()}</div><div class="stat-sub">全動画合計</div></div>
+    <div class="stat"><div class="stat-label">総再生時間</div><div class="stat-val">${Math.round(totalW/60)}h</div><div class="stat-sub">${totalW.toLocaleString()} 分</div></div>
+    <div class="stat"><div class="stat-label">制作中</div><div class="stat-val">${wip}</div><div class="stat-sub">企画〜編集</div></div>
+  `;
+  document.getElementById('video-count-label').textContent = `${videos.length} 本の動画`;
+
+  const signed = isSignedIn();
+  document.getElementById('video-tbody').innerHTML = videos.map(v => {
+    const shootRegistered = v.gcal_shoot_id ? '✓' : '';
+    const postRegistered  = v.gcal_post_id  ? '✓' : '';
+    return `<tr>
+      <td style="font-weight:500;max-width:200px">${v.title}</td>
+      <td><span class="badge ${STATUS_BADGE[v.status]}">${STATUS_LABEL[v.status]}</span></td>
+      <td style="white-space:nowrap">${v.shootDate || '—'}</td>
+      <td style="white-space:nowrap">${v.postDate  || '—'}</td>
+      <td>${v.views ? v.views.toLocaleString() : '—'}</td>
+      <td>
+        <div class="gcal-btns">
+          <button class="btn btn-shoot" onclick="addToCalendar(${v.id},'shoot')" ${!v.shootDate?'disabled':''}>📷 撮影日 ${shootRegistered}</button>
+          <button class="btn btn-post"  onclick="addToCalendar(${v.id},'post')"  ${!v.postDate ?'disabled':''}>📹 投稿日 ${postRegistered}</button>
+          <button class="btn btn-both"  onclick="addToCalendar(${v.id},'both')"  ${(!v.shootDate&&!v.postDate)?'disabled':''}>両方追加</button>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn" style="padding:4px 8px;font-size:11px" onclick="openVideoModal(${v.id})">編集</button>
+          <button class="btn btn-del" onclick="deleteVideo(${v.id})">削除</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCal() {
+  const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  document.getElementById('cal-title').textContent = `${calYear}年 ${months[calMonth]}`;
+  const grid = document.getElementById('cal-grid');
+  const days = ['日','月','火','水','木','金','土'];
+  let html = days.map(d => `<div class="cal-day-label">${d}</div>`).join('');
+  const first = new Date(calYear, calMonth, 1).getDay();
+  const last  = new Date(calYear, calMonth+1, 0).getDate();
+  const today = new Date();
+  const isToday = (d) => calYear === today.getFullYear() && calMonth === today.getMonth() && d === today.getDate();
+
+  for (let i = 0; i < first; i++) {
+    const pd = new Date(calYear, calMonth, 0).getDate() - first + 1 + i;
+    html += `<div class="cal-cell other-month"><div class="cal-date">${pd}</div></div>`;
+  }
+  for (let d = 1; d <= last; d++) {
+    const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const shoots = videos.filter(v => v.shootDate === ds);
+    const posts  = videos.filter(v => v.postDate  === ds);
+    let ev = shoots.map(v => `<div class="cal-event ev-shoot" title="📷 ${v.title}">📷 ${v.title.slice(0,9)}</div>`).join('');
+    ev    += posts.map(v  => `<div class="cal-event ev-post"  title="📹 ${v.title}">📹 ${v.title.slice(0,9)}</div>`).join('');
+    html += `<div class="cal-cell${isToday(d)?' today':''}"><div class="cal-date">${d}</div>${ev}</div>`;
+  }
+  const rem = (7 - (first + last) % 7) % 7;
+  for (let i = 1; i <= rem; i++) html += `<div class="cal-cell other-month"><div class="cal-date">${i}</div></div>`;
+  grid.innerHTML = html;
+}
+
+function changeMonth(d) {
+  calMonth += d;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0)  { calMonth = 11; calYear--; }
+  renderCal();
+}
+
+function renderTasks() {
+  document.getElementById('task-list').innerHTML = tasks.map(t => `
+    <div class="task-item ${t.done?'done':''}">
+      <input type="checkbox" class="task-check" ${t.done?'checked':''} onchange="toggleTask(${t.id})">
+      <span class="task-text">${t.text}</span>
+      ${t.video ? `<span class="task-tag">${t.video}</span>` : ''}
+      <button class="btn btn-del" style="padding:3px 7px;font-size:11px" onclick="deleteTask(${t.id})">×</button>
+    </div>`).join('');
+}
+
+function toggleTask(id) {
+  const t = tasks.find(t => t.id === id);
+  if (t) { t.done = !t.done; saveTasks(); renderTasks(); }
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  saveTasks(); renderTasks();
+}
+
+function openTaskModal()  { document.getElementById('task-modal').classList.add('open'); }
+function closeTaskModal() { document.getElementById('task-modal').classList.remove('open'); }
+
+function saveTask() {
+  const text = document.getElementById('tm-text').value.trim();
+  if (!text) { toast('タスク内容を入力してください'); return; }
+  tasks.push({ id: Date.now(), text, video: document.getElementById('tm-video').value.trim(), done: false });
+  saveTasks(); closeTaskModal();
+  document.getElementById('tm-text').value = '';
+  document.getElementById('tm-video').value = '';
+  renderTasks(); toast('タスクを追加しました');
+}
+
+// ===== 設定 =====
+function saveClientId() {
+  const val = document.getElementById('client-id-input').value.trim();
+  if (!val) { toast('クライアントIDを入力してください'); return; }
+  localStorage.setItem('yt_gcal_client_id', val);
+  document.getElementById('settings-msg').textContent = '保存しました。ページを再読み込みしてください。';
+  setTimeout(() => location.reload(), 1200);
+}
+function clearClientId() {
+  localStorage.removeItem('yt_gcal_client_id');
+  document.getElementById('client-id-input').value = '';
+  document.getElementById('settings-msg').textContent = 'クリアしました。';
+}
+
+// ===== エクスポート / インポート =====
+function exportData() {
+  const blob = new Blob([JSON.stringify({ videos, tasks }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'youtube_manager_backup.json';
+  a.click();
+}
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data.videos) videos = data.videos;
+      if (data.tasks)  tasks  = data.tasks;
+      saveVideos(); saveTasks(); renderVideos(); renderTasks();
+      toast('インポートしました ✓');
+    } catch(err) { toast('ファイルの読み込みに失敗しました'); }
+  };
+  reader.readAsText(file);
+}
+
+// ===== タブ =====
+function showTab(t) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="'${t}'"]`).classList.add('active');
+  document.getElementById('sec-' + t).classList.add('active');
+  if (t === 'calendar') renderCal();
+  if (t === 'settings') {
+    const saved = localStorage.getItem('yt_gcal_client_id') || '';
+    document.getElementById('client-id-input').value = saved;
+  }
+}
+
+// ===== トースト =====
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ===== モーダル外クリックで閉じる =====
+['video-modal','task-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+});
+
+// ===== 初期化 =====
+window.gapiLoaded = gapiLoaded;
+window.gisLoaded  = gisLoaded;
+
+renderVideos();
+renderTasks();
+
+// Google API スクリプト動的ロード
+const s1 = document.createElement('script');
+s1.src = 'https://apis.google.com/js/api.js';
+s1.onload = gapiLoaded;
+document.head.appendChild(s1);
+
+const s2 = document.createElement('script');
+s2.src = 'https://accounts.google.com/gsi/client';
+s2.onload = gisLoaded;
+document.head.appendChild(s2);
+</script>
+</body>
+</html>
