@@ -151,10 +151,14 @@
   <header>
     <h1>📹 YouTube管理表</h1>
     <div id="auth-bar">
+      <span style="font-size:11px;color:var(--text3)">カレンダー</span>
       <span id="auth-status" class="auth-status auth-off">未接続</span>
-      <span id="user-info"></span>
-      <button id="signin-btn" onclick="handleSignIn()">Googleでサインイン</button>
+      <button id="signin-btn" onclick="handleSignIn()">サインイン</button>
       <button id="signout-btn" onclick="handleSignOut()">サインアウト</button>
+      <span style="font-size:11px;color:var(--text3);margin-left:8px">YouTube</span>
+      <span id="yt-auth-status" class="auth-status auth-off">未接続</span>
+      <button id="yt-signin-btn" onclick="handleYTSignIn()">サインイン</button>
+      <button id="yt-signout-btn" onclick="handleYTSignOut()" style="display:none">サインアウト</button>
     </div>
   </header>
 
@@ -170,7 +174,10 @@
     <div class="stats" id="stats-area"></div>
     <div class="sec-header">
       <span style="font-size:13px;color:var(--text2)" id="video-count-label"></span>
-      <button class="btn btn-primary" onclick="openVideoModal()">+ 動画を追加</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" style="background:var(--green-bg);color:var(--green-text);border-color:transparent" onclick="fetchYouTubeData()">📊 YouTubeデータを更新</button>
+        <button class="btn btn-primary" onclick="openVideoModal()">+ 動画を追加</button>
+      </div>
     </div>
     <div class="card" style="padding:0">
       <div class="table-wrap">
@@ -240,6 +247,28 @@
     </div>
 
     <div class="card" style="margin-top:0">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:8px">YouTube Data API 設定</h3>
+      <div class="settings-note" style="margin-bottom:12px">
+        <strong>YouTube用クライアントID（別アカウント用）：</strong><br>
+        1. Google Cloud ConsoleでYouTubeチャンネルのGoogleアカウントにログイン<br>
+        2. 同じプロジェクトで「YouTube Data API v3」を有効化<br>
+        3. OAuthクライアントIDを作成（または既存のものを使用）<br>
+        4. OAuth同意画面の「データアクセス」に <code>youtube.readonly</code> スコープを追加<br>
+        5. テストユーザーにYouTubeアカウントのメールを追加
+      </div>
+      <div class="form-row">
+        <label>YouTubeアカウント用クライアントID（カレンダーと別の場合のみ）</label>
+        <input type="text" class="client-id-input" id="yt-client-id-input" placeholder="空白の場合はカレンダーと同じクライアントIDを使用">
+        <div class="form-hint">空白のままにするとカレンダーと同じクライアントIDを使います</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="saveYTClientId()">保存</button>
+        <button class="btn" style="background:var(--green-bg);color:var(--green-text);border-color:transparent" onclick="fetchYouTubeData()">📊 YouTubeデータを今すぐ更新</button>
+      </div>
+      <div id="yt-settings-msg" style="margin-top:10px;font-size:13px"></div>
+    </div>
+
+    <div class="card" style="margin-top:0">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">データ管理</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" onclick="exportData()">📥 JSONエクスポート</button>
@@ -305,6 +334,8 @@ const STATUS_LABEL = { plan:'企画中', shoot:'撮影中', edit:'編集中', do
 const STATUS_BADGE = { plan:'s-plan', shoot:'s-shoot', edit:'s-edit', done:'s-done', live:'s-live' };
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+const YT_SCOPES = 'https://www.googleapis.com/auth/youtube.readonly';
+const YT_DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest';
 
 // ===== データ =====
 let videos = JSON.parse(localStorage.getItem('yt_videos') || 'null') || [
@@ -323,6 +354,8 @@ let tasks = JSON.parse(localStorage.getItem('yt_tasks') || 'null') || [
 let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
 let editingVideoId = null;
 let tokenClient = null;
+let ytTokenClient = null;
+let ytAccessToken = null;
 let gapiInited = false, gisInited = false;
 
 function saveVideos() { localStorage.setItem('yt_videos', JSON.stringify(videos)); }
@@ -335,7 +368,7 @@ function getClientId() {
 
 function gapiLoaded() {
   gapi.load('client', async () => {
-    await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+    await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC, YT_DISCOVERY_DOC] });
     gapiInited = true;
     maybeInitToken();
   });
@@ -383,6 +416,128 @@ function handleSignOut() {
   }
   updateAuthUI(false);
   renderVideos();
+}
+
+// ===== YouTube認証 =====
+function getYTClientId() {
+  return localStorage.getItem('yt_youtube_client_id') || getClientId();
+}
+
+function handleYTSignIn() {
+  const clientId = getYTClientId();
+  if (!clientId) { showTab('settings'); toast('先にクライアントIDを設定してください'); return; }
+  ytTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: YT_SCOPES,
+    callback: (resp) => {
+      if (resp.error) { toast('YouTube認証エラー: ' + resp.error); return; }
+      ytAccessToken = resp.access_token;
+      updateYTAuthUI(true);
+      toast('YouTubeに接続しました ✓');
+      fetchYouTubeData();
+    }
+  });
+  ytTokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function handleYTSignOut() {
+  if (ytAccessToken) {
+    google.accounts.oauth2.revoke(ytAccessToken, () => {});
+    ytAccessToken = null;
+  }
+  updateYTAuthUI(false);
+}
+
+function updateYTAuthUI(isSignedIn) {
+  const statusEl  = document.getElementById('yt-auth-status');
+  const signinBtn = document.getElementById('yt-signin-btn');
+  const signoutBtn= document.getElementById('yt-signout-btn');
+  if (isSignedIn) {
+    statusEl.textContent = '接続中';
+    statusEl.className = 'auth-status auth-on';
+    signinBtn.style.display = 'none';
+    signoutBtn.style.display = 'inline-block';
+  } else {
+    statusEl.textContent = '未接続';
+    statusEl.className = 'auth-status auth-off';
+    signinBtn.style.display = 'inline-block';
+    signoutBtn.style.display = 'none';
+  }
+}
+
+function saveYTClientId() {
+  const val = document.getElementById('yt-client-id-input').value.trim();
+  if (val) localStorage.setItem('yt_youtube_client_id', val);
+  else localStorage.removeItem('yt_youtube_client_id');
+  document.getElementById('yt-settings-msg').textContent = '保存しました';
+  document.getElementById('yt-settings-msg').style.color = 'var(--green-text)';
+  setTimeout(() => document.getElementById('yt-settings-msg').textContent = '', 2000);
+}
+
+// ===== YouTube Data API でデータ取得 =====
+async function fetchYouTubeData() {
+  if (!ytAccessToken) {
+    toast('先にYouTubeアカウントでサインインしてください');
+    return;
+  }
+  const msg = document.getElementById('yt-settings-msg');
+  msg.textContent = '取得中...';
+  msg.style.color = 'var(--text2)';
+  try {
+    // チャンネルの動画一覧を取得
+    const channelRes = await fetch(
+      'https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true',
+      { headers: { Authorization: 'Bearer ' + ytAccessToken } }
+    );
+    const channelData = await channelRes.json();
+    if (!channelData.items?.length) { msg.textContent = 'チャンネルが見つかりません'; return; }
+
+    const uploadsId = channelData.items[0].contentDetails.relatedPlaylists.uploads;
+
+    // アップロード動画一覧
+    const playlistRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsId}&maxResults=50`,
+      { headers: { Authorization: 'Bearer ' + ytAccessToken } }
+    );
+    const playlistData = await playlistRes.json();
+    const videoIds = playlistData.items.map(i => i.contentDetails.videoId).join(',');
+
+    // 各動画の統計情報
+    const statsRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoIds}`,
+      { headers: { Authorization: 'Bearer ' + ytAccessToken } }
+    );
+    const statsData = await statsRes.json();
+
+    let updated = 0;
+    statsData.items.forEach(yt => {
+      const title = yt.snippet.title;
+      const views = parseInt(yt.statistics.viewCount || 0);
+      // ISO 8601 duration → 分に変換
+      const dur = yt.contentDetails.duration;
+      const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      const mins = (parseInt(match?.[1]||0)*60) + parseInt(match?.[2]||0) + Math.round(parseInt(match?.[3]||0)/60);
+
+      // タイトルが部分一致する動画を更新
+      const v = videos.find(v => title.includes(v.title) || v.title.includes(title.slice(0,15)));
+      if (v) {
+        v.views = views;
+        v.watch = mins;
+        v.ytVideoId = yt.id;
+        updated++;
+      }
+    });
+
+    saveVideos();
+    renderVideos();
+    msg.textContent = `✓ ${updated}本の動画データを更新しました（YouTube側: ${statsData.items.length}本）`;
+    msg.style.color = 'var(--green-text)';
+    toast(`${updated}本の動画を更新しました ✓`);
+  } catch(e) {
+    msg.textContent = 'エラー: ' + e.message;
+    msg.style.color = 'var(--red-text)';
+    toast('データ取得に失敗しました');
+  }
 }
 
 function updateAuthUI(isSignedIn) {
@@ -712,6 +867,8 @@ function showTab(t) {
   if (t === 'settings') {
     const saved = localStorage.getItem('yt_gcal_client_id') || '';
     document.getElementById('client-id-input').value = saved;
+    const ytSaved = localStorage.getItem('yt_youtube_client_id') || '';
+    document.getElementById('yt-client-id-input').value = ytSaved;
   }
 }
 
