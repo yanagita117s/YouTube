@@ -190,7 +190,8 @@
             <th>視聴回数</th>
             <th>いいね数</th>
             <th>評価</th>
-            <th>総評</th>
+            <th>良かった点</th>
+            <th>改善点</th>
             <th>Googleカレンダー</th>
             <th></th>
           </tr></thead>
@@ -319,7 +320,8 @@
       </div>
       <input type="hidden" id="m-rating-val" value="0">
     </div>
-    <div class="form-row"><label>総評・改善メモ</label><textarea id="m-memo" rows="3" placeholder="この動画の振り返りや改善点など"></textarea></div>
+    <div class="form-row"><label>良かった点</label><textarea id="m-good" rows="3" placeholder="この動画で上手くいったこと、反響が良かった点など"></textarea></div>
+    <div class="form-row"><label>改善点</label><textarea id="m-improve" rows="3" placeholder="次回に活かしたい改善点、反省点など"></textarea></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeVideoModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveVideo()">保存</button>
@@ -340,7 +342,15 @@
   </div>
 </div>
  
-<div id="toast"></div>
+<div class="modal-bg" id="note-modal">
+  <div class="modal">
+    <h3 id="note-modal-title"></h3>
+    <p id="note-modal-body" style="font-size:14px;line-height:1.8;color:var(--text);white-space:pre-wrap"></p>
+    <div class="modal-btns">
+      <button class="btn btn-primary" onclick="document.getElementById('note-modal').classList.remove('open')">閉じる</button>
+    </div>
+  </div>
+</div>
  
 <script>
 // ===== 定数 =====
@@ -710,7 +720,8 @@ function openVideoModal(id) {
   document.getElementById('m-post').value   = v ? (v.postDate  || '') : '';
   document.getElementById('m-views').value  = v ? v.views : '';
   document.getElementById('m-watch').value  = v ? v.watch : '';
-  document.getElementById('m-memo').value   = v ? (v.memo || '') : '';
+  document.getElementById('m-good').value    = v ? (v.good || '') : '';
+  document.getElementById('m-improve').value = v ? (v.improve || '') : '';
   setRating(v ? (v.rating || 0) : 0);
   document.getElementById('video-modal').classList.add('open');
 }
@@ -733,7 +744,8 @@ function saveVideo() {
     postDate:  document.getElementById('m-post').value,
     views: parseInt(document.getElementById('m-views').value) || 0,
     watch: parseInt(document.getElementById('m-watch').value) || 0,
-    memo:  document.getElementById('m-memo').value.trim(),
+    good:    document.getElementById('m-good').value.trim(),
+    improve: document.getElementById('m-improve').value.trim(),
     rating: parseInt(document.getElementById('m-rating-val').value) || 0,
   };
   if (editingVideoId) {
@@ -791,7 +803,12 @@ function renderVideos() {
       <td>${v.views ? v.views.toLocaleString() : '—'}</td>
       <td>${v.likes ? v.likes.toLocaleString() : '—'}</td>
       <td style="white-space:nowrap;color:#EF9F27">${v.rating ? '★'.repeat(v.rating)+'☆'.repeat(5-v.rating) : '—'}</td>
-      <td style="max-width:160px;font-size:12px;color:var(--text2)">${v.memo ? v.memo.slice(0,40)+(v.memo.length>40?'…':'') : '—'}</td>
+      <td style="max-width:140px;font-size:12px;color:var(--text2);cursor:${v.good?'pointer':'default'}" onclick="${v.good?`showNote('良かった点','${v.good.replace(/'/g,"&#39;").replace(/\n/g,"\\n")}')`:''}">
+        ${v.good ? '<span style="background:var(--green-bg);color:var(--green-text);border-radius:3px;padding:1px 5px;font-size:10px">✓</span> '+v.good.slice(0,25)+(v.good.length>25?'…':'') : '—'}
+      </td>
+      <td style="max-width:140px;font-size:12px;color:var(--text2);cursor:${v.improve?'pointer':'default'}" onclick="${v.improve?`showNote('改善点','${v.improve.replace(/'/g,"&#39;").replace(/\n/g,"\\n")}')`:''}">
+        ${v.improve ? '<span style="background:var(--amber-bg);color:var(--amber-text);border-radius:3px;padding:1px 5px;font-size:10px">!</span> '+v.improve.slice(0,25)+(v.improve.length>25?'…':'') : '—'}
+      </td>
       <td>
         <div class="gcal-btns">
           <button class="btn btn-shoot" onclick="addToCalendar(${v.id},'shoot')" ${!v.shootDate?'disabled':''}>📷 撮影日 ${shootRegistered}</button>
@@ -931,6 +948,12 @@ function showTab(t) {
 }
  
 // ===== トースト =====
+function showNote(title, text) {
+  document.getElementById('note-modal-title').textContent = title;
+  document.getElementById('note-modal-body').textContent = text.replace(/\\n/g, '\n');
+  document.getElementById('note-modal').classList.add('open');
+}
+ 
 function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
@@ -938,7 +961,7 @@ function toast(msg) {
 }
  
 // ===== モーダル外クリックで閉じる =====
-['video-modal','task-modal'].forEach(id => {
+['video-modal','task-modal','note-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('open');
   });
@@ -964,4 +987,3 @@ document.head.appendChild(s2);
 </script>
 </body>
 </html>
- 
