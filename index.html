@@ -189,6 +189,8 @@
             <th>投稿予定日</th>
             <th>視聴回数</th>
             <th>いいね数</th>
+            <th>評価</th>
+            <th>総評</th>
             <th>Googleカレンダー</th>
             <th></th>
           </tr></thead>
@@ -306,7 +308,18 @@
     </div>
     <div class="form-row"><label>視聴回数</label><input type="number" id="m-views" placeholder="0" min="0"></div>
     <div class="form-row"><label>総再生時間（分）</label><input type="number" id="m-watch" placeholder="0" min="0"></div>
-    <div class="form-row"><label>メモ</label><textarea id="m-memo" rows="2" placeholder="備考など"></textarea></div>
+    <div class="form-row">
+      <label>評価</label>
+      <div id="m-rating" style="display:flex;gap:6px;margin-top:4px">
+        <span class="star-btn" data-val="1" onclick="setRating(1)" style="font-size:24px;cursor:pointer;opacity:0.3">★</span>
+        <span class="star-btn" data-val="2" onclick="setRating(2)" style="font-size:24px;cursor:pointer;opacity:0.3">★</span>
+        <span class="star-btn" data-val="3" onclick="setRating(3)" style="font-size:24px;cursor:pointer;opacity:0.3">★</span>
+        <span class="star-btn" data-val="4" onclick="setRating(4)" style="font-size:24px;cursor:pointer;opacity:0.3">★</span>
+        <span class="star-btn" data-val="5" onclick="setRating(5)" style="font-size:24px;cursor:pointer;opacity:0.3">★</span>
+      </div>
+      <input type="hidden" id="m-rating-val" value="0">
+    </div>
+    <div class="form-row"><label>総評・改善メモ</label><textarea id="m-memo" rows="3" placeholder="この動画の振り返りや改善点など"></textarea></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeVideoModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveVideo()">保存</button>
@@ -698,7 +711,16 @@ function openVideoModal(id) {
   document.getElementById('m-views').value  = v ? v.views : '';
   document.getElementById('m-watch').value  = v ? v.watch : '';
   document.getElementById('m-memo').value   = v ? (v.memo || '') : '';
+  setRating(v ? (v.rating || 0) : 0);
   document.getElementById('video-modal').classList.add('open');
+}
+ 
+function setRating(val) {
+  document.getElementById('m-rating-val').value = val;
+  document.querySelectorAll('.star-btn').forEach(s => {
+    s.style.opacity = parseInt(s.dataset.val) <= val ? '1' : '0.25';
+    s.style.color = parseInt(s.dataset.val) <= val ? '#EF9F27' : '';
+  });
 }
 function closeVideoModal() { document.getElementById('video-modal').classList.remove('open'); }
  
@@ -712,6 +734,7 @@ function saveVideo() {
     views: parseInt(document.getElementById('m-views').value) || 0,
     watch: parseInt(document.getElementById('m-watch').value) || 0,
     memo:  document.getElementById('m-memo').value.trim(),
+    rating: parseInt(document.getElementById('m-rating-val').value) || 0,
   };
   if (editingVideoId) {
     const v = videos.find(v => v.id === editingVideoId);
@@ -744,6 +767,7 @@ function renderVideos() {
     <div class="stat"><div class="stat-label">総動画数</div><div class="stat-val">${videos.length}</div><div class="stat-sub">公開済み ${live}本</div></div>
     <div class="stat"><div class="stat-label">総視聴回数</div><div class="stat-val">${totalV.toLocaleString()}</div><div class="stat-sub">全動画合計</div></div>
     <div class="stat"><div class="stat-label">総いいね数</div><div class="stat-val">${videos.reduce((s,v)=>s+(v.likes||0),0).toLocaleString()}</div><div class="stat-sub">全動画合計</div></div>
+    <div class="stat"><div class="stat-label">平均評価</div><div class="stat-val" style="color:#EF9F27">${(()=>{const rated=videos.filter(v=>v.rating);return rated.length?(rated.reduce((s,v)=>s+v.rating,0)/rated.length).toFixed(1):'—';})()}</div><div class="stat-sub">★5点満点</div></div>
     <div class="stat"><div class="stat-label">制作中</div><div class="stat-val">${wip}</div><div class="stat-sub">企画〜編集</div></div>
   `;
   document.getElementById('video-count-label').textContent = `${videos.length} 本の動画`;
@@ -759,6 +783,8 @@ function renderVideos() {
       <td style="white-space:nowrap">${v.postDate  || '—'}</td>
       <td>${v.views ? v.views.toLocaleString() : '—'}</td>
       <td>${v.likes ? v.likes.toLocaleString() : '—'}</td>
+      <td style="white-space:nowrap;color:#EF9F27">${v.rating ? '★'.repeat(v.rating)+'☆'.repeat(5-v.rating) : '—'}</td>
+      <td style="max-width:160px;font-size:12px;color:var(--text2)">${v.memo ? v.memo.slice(0,40)+(v.memo.length>40?'…':'') : '—'}</td>
       <td>
         <div class="gcal-btns">
           <button class="btn btn-shoot" onclick="addToCalendar(${v.id},'shoot')" ${!v.shootDate?'disabled':''}>📷 撮影日 ${shootRegistered}</button>
